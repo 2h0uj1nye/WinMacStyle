@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🍎 WinMacStyle
 
 > **Windows 桌面一键切换 macOS 风格** —— 外观苹果化，操作与功能完全保留 Windows 习惯。
@@ -113,3 +114,7 @@ macOS 官方壁纸（Sonoma / Ventura / Sequoia / Tahoe 等）整理在 `wallpap
 
 - [MyDockFinder](https://www.mydockfinder.com/) — 提供 macOS 风格 Dock
 - [LAYTAT/macOS-Wallpapers](https://github.com/LAYTAT/macOS-Wallpapers) — macOS 官方壁纸合集
+=======
+# WinMacStyle
+一键把 Windows 桌面切换成 macOS 风格（Dock + 隐藏图标 + 任务栏自动隐藏），外观苹果化、操作保留 Windows 习惯；双击即可在两种风格间自由切换，壁纸完全独立。
+>>>>>>> 328b39aae6c47271ab2daa6c98f1c0a849f9340c
