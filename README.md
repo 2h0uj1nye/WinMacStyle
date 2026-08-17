@@ -75,6 +75,28 @@ powershell -ExecutionPolicy Bypass -File scripts\WinMacStyle.ps1 -On -DockDir "D
 
 ---
 
+## 📂 访问桌面软件（Mac 模式下）
+
+Mac 模式下桌面图标被隐藏，想打开 Windows 桌面上的软件（QQ / 微信 / 网易云等）时：
+
+**方式一：打开桌面文件夹（脚本，推荐）**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\Open-Desktop.ps1
+```
+
+会打开一个资源管理器窗口显示桌面内容，所有桌面快捷方式都在里面。
+
+**方式二：拖拽添加到 Dock（MyDockFinder 原生）**
+
+直接把桌面上的快捷方式**拖到 Dock 栏**上即可固定，以后在 Mac 模式下直接点 Dock 图标打开：
+
+![拖拽添加](docs/screenshot.png)
+
+> 💡 MyDockFinder 的 Dock 图标由程序内部管理（启动时恢复），不推荐直接改配置文件 `ico.ini`。
+
+---
+
 ## 🖼️ 壁纸
 
 macOS 官方壁纸（Sonoma / Ventura / Sequoia / Tahoe 等）整理在 `wallpaper/macos/` 目录：
