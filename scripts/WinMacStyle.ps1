@@ -178,22 +178,38 @@ function Start-MacStyle {
     Write-Host '  [2/4] 隐藏桌面图标 ...' -ForegroundColor Green
     Set-DesktopIcons -show $false
 
-    # 3. 任务栏自动隐藏
-    Write-Host '  [3/4] 设置任务栏自动隐藏 ...' -ForegroundColor Green
-    Set-TaskbarAutoHide -autoHide $true
+    # 3. 启动任务栏守护（完全隐藏任务栏，按 Win 键唤出）
+    Write-Host '  [3/4] 启动任务栏守护（隐藏任务栏，按 Win 键唤出）...' -ForegroundColor Green
+    $guardScript = Join-Path $PSScriptRoot 'TaskbarGuard.ps1'
+    if (Test-Path $guardScript) {
+        Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$guardScript`"" -WindowStyle Hidden
+        Start-Sleep -Seconds 2
+        Write-Host '  [ok] 任务栏守护已启动'
+    } else {
+        Write-Host '  [warn] 未找到 TaskbarGuard.ps1，回退为自动隐藏' -ForegroundColor Yellow
+        Set-TaskbarAutoHide -autoHide $true
+    }
 
-    # 4. 重启 explorer 生效
-    Write-Host '  [4/4] 重启 explorer 应用设置 ...' -ForegroundColor Green
-    Restart-Explorer
-
-    # 重启后同步图标状态（explorer 重启会把 HideIcons 重置为 1，正好是隐藏）
-    Set-DesktopIcons -show $false
+    # 4. 隐藏任务栏窗口（无需重启 explorer）
+    Write-Host '  [4/4] 隐藏任务栏窗口 ...' -ForegroundColor Green
+    try {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class TrayH {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+}
+'@
+        $th = [TrayH]::FindWindow('Shell_TrayWnd', $null)
+        if ($th -ne [IntPtr]::Zero) { [TrayH]::ShowWindow($th, 0) | Out-Null; Write-Host '  [ok] 任务栏已隐藏' }
+    } catch { }
 
     Write-Host ''
     Write-Host '  Mac 风格已开启！' -ForegroundColor Green
-    Write-Host '  - Dock 栏 + 桌面无图标 + 任务栏自动隐藏' -ForegroundColor Green
+    Write-Host '  - Dock 栏 + 桌面无图标 + 任务栏完全隐藏' -ForegroundColor Green
     Write-Host '  - 壁纸保持不变（Windows 设置 -> 个性化 统一管理）' -ForegroundColor DarkGray
-    Write-Host '  提示: 需要任务栏时，把鼠标移到屏幕最底部即可滑出' -ForegroundColor Yellow
+    Write-Host '  提示: 按 Win 键唤出任务栏/开始菜单，松开几秒后自动隐藏' -ForegroundColor Yellow
 }
 
 function Stop-MacStyle {
@@ -210,16 +226,22 @@ function Stop-MacStyle {
         Write-Host '  [1/4] MyDockFinder 未在运行' -ForegroundColor Green
     }
 
-    # 2. 恢复任务栏常驻
-    Write-Host '  [2/4] 恢复任务栏常驻显示 ...' -ForegroundColor Green
-    Set-TaskbarAutoHide -autoHide $false
+    # 2. 停止任务栏守护并恢复任务栏
+    Write-Host '  [2/4] 停止任务栏守护，恢复任务栏 ...' -ForegroundColor Green
+    $guardScript = Join-Path $PSScriptRoot 'TaskbarGuard.ps1'
+    if (Test-Path $guardScript) {
+        # 结束已有的守护进程
+        Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -match 'TaskbarGuard' } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        # 显示任务栏窗口
+        powershell -NoProfile -ExecutionPolicy Bypass -File $guardScript -Show 2>$null
+    } else {
+        Set-TaskbarAutoHide -autoHide $false
+    }
 
-    # 3. 重启 explorer 生效
-    Write-Host '  [3/4] 重启 explorer 应用设置 ...' -ForegroundColor Green
-    Restart-Explorer
-
-    # 4. 恢复桌面图标（必须在 explorer 重启后设置，否则被重置）
-    Write-Host '  [4/4] 恢复桌面图标 ...' -ForegroundColor Green
+    # 3. 恢复桌面图标（消息方式，不重启 explorer）
+    Write-Host '  [3/4] 恢复桌面图标 ...' -ForegroundColor Green
     Set-DesktopIcons -show $true
 
     Write-Host ''
