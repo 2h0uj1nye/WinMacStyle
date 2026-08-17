@@ -1,25 +1,26 @@
 ﻿# =============================================
-#  Apply-PerfTuning.ps1 — 一键优化 MyDockFinder 性能
+#  Apply-PerfTuning.ps1 — MyDockFinder 特效调节
 #  =============================================
 #  功能：
-#    关闭 MyDockFinder 的高开销视觉效果，让低配置电脑
-#    也能流畅运行：
-#      - 毛玻璃模糊  blurvalue: 30 -> 0
-#      - 图标特效    dockicoeffect: 1 -> 0
-#      - 窗口缩略图  DWMThumbnail/enabled: 1 -> 0
-#      - 最小化动画  minimize/enabled: 1 -> 0
-#      - 窗口动画    WindowsOpen/AnimationEffect: 1 -> 0
-#      - 图标放大上限 maxsize: 128 -> 96
+#    在"macOS 视觉效果"与"流畅度"之间调节 MyDockFinder。
+#
+#  三种模式：
+#    (默认) 折中模式：保留图标特效/动画/模糊(15)，
+#                     关闭最耗资源的窗口缩略图与 Aero Peek
+#    -Max         极致流畅：关闭模糊/特效/动画/缩略图
+#    -Restore     完全恢复：全部特效打开（出厂感觉）
 #
 #  用法：
 #    powershell -ExecutionPolicy Bypass -File Apply-PerfTuning.ps1
+#    powershell -ExecutionPolicy Bypass -File Apply-PerfTuning.ps1 -Max
+#    powershell -ExecutionPolicy Bypass -File Apply-PerfTuning.ps1 -Restore
 #
 #  可选参数：
 #    -DockDir "D:\MyDockFinder"   指定 MyDockFinder 目录（默认自动检测）
-#    -Restore                      恢复备份的原始配置
 # =============================================
 param(
     [string]$DockDir = '',
+    [switch]$Max,
     [switch]$Restore
 )
 
@@ -56,52 +57,53 @@ if (-not (Test-Path $cfg)) {
 
 Write-Host "MyDockFinder: $dockDir" -ForegroundColor DarkGray
 
-if ($Restore) {
-    # 恢复原始配置
-    $bak = "$cfg.orig"
-    if (Test-Path $bak) {
-        Copy-Item $bak $cfg -Force
-        Write-Host '[ok] 已恢复原始配置' -ForegroundColor Green
-    } else {
-        Write-Host '[warn] 未找到原始备份，跳过' -ForegroundColor Yellow
-    }
-} else {
-    # 首次备份原始配置
-    if (-not (Test-Path "$cfg.orig")) {
-        Copy-Item $cfg "$cfg.orig" -Force
-        Write-Host '已备份原始配置到 config.ini.orig' -ForegroundColor DarkGray
-    }
-
-    # 逐段逐行优化
-    $lines = [System.IO.File]::ReadAllLines($cfg, [System.Text.Encoding]::UTF8)
-    $out = New-Object System.Collections.ArrayList
-    $section = ''
-    foreach ($l in $lines) {
-        if ($l -match '^\[(.+)\]$') { $section = $Matches[1] }
-        $new = $l
-        switch ($section) {
-            'normal' {
-                if ($l -match '^dockicoeffect=') { $new = 'dockicoeffect=0' }
-                if ($l -match '^blurvalue=')     { $new = 'blurvalue=0' }
-                if ($l -match '^maxsize=')       { $new = 'maxsize=96' }
-            }
-            'DWMThumbnail' {
-                if ($l -match '^enabled=')  { $new = 'enabled=0' }
-                if ($l -match '^aeropeek=') { $new = 'aeropeek=0' }
-            }
-            'minimize' {
-                if ($l -match '^enabled=') { $new = 'enabled=0' }
-            }
-            'WindowsOpen' {
-                if ($l -match '^AnimationEffect=') { $new = 'AnimationEffect=0' }
-                if ($l -match '^enable=')          { $new = 'enable=0' }
-            }
-        }
-        [void]$out.Add($new)
-    }
-    [System.IO.File]::WriteAllLines($cfg, $out.ToArray(), [System.Text.Encoding]::UTF8)
-    Write-Host '[ok] 性能优化已应用（模糊/特效/动画/缩略图已关闭）' -ForegroundColor Green
+# 各模式下每个配置项的目标值
+$values = @{
+    'dockicoeffect' = 1; 'blurvalue' = 30; 'maxsize' = 128;
+    'thumb_enabled' = 1; 'aeropeek' = 1;
+    'min_enabled' = 1; 'anim_effect' = 1; 'anim_enable' = 1
 }
+if ($Max) {
+    $values['dockicoeffect'] = 0; $values['blurvalue'] = 0; $values['maxsize'] = 96
+    $values['thumb_enabled'] = 0; $values['aeropeek'] = 0
+    $values['min_enabled'] = 0; $values['anim_effect'] = 0; $values['anim_enable'] = 0
+} elseif (-not $Restore) {
+    # 折中模式（默认）
+    $values['blurvalue'] = 15; $values['maxsize'] = 112
+    $values['thumb_enabled'] = 0; $values['aeropeek'] = 0
+    # 其余保持全开（图标特效/动画）
+}
+
+$lines = [System.IO.File]::ReadAllLines($cfg, [System.Text.Encoding]::UTF8)
+$out = New-Object System.Collections.ArrayList
+$section = ''
+foreach ($l in $lines) {
+    if ($l -match '^\[(.+)\]$') { $section = $Matches[1] }
+    $new = $l
+    switch ($section) {
+        'normal' {
+            if ($l -match '^dockicoeffect=') { $new = "dockicoeffect=$($values['dockicoeffect'])" }
+            if ($l -match '^blurvalue=')     { $new = "blurvalue=$($values['blurvalue'])" }
+            if ($l -match '^maxsize=')       { $new = "maxsize=$($values['maxsize'])" }
+        }
+        'DWMThumbnail' {
+            if ($l -match '^enabled=')  { $new = "enabled=$($values['thumb_enabled'])" }
+            if ($l -match '^aeropeek=') { $new = "aeropeek=$($values['aeropeek'])" }
+        }
+        'minimize' {
+            if ($l -match '^enabled=') { $new = "enabled=$($values['min_enabled'])" }
+        }
+        'WindowsOpen' {
+            if ($l -match '^AnimationEffect=') { $new = "AnimationEffect=$($values['anim_effect'])" }
+            if ($l -match '^enable=')          { $new = "enable=$($values['anim_enable'])" }
+        }
+    }
+    [void]$out.Add($new)
+}
+[System.IO.File]::WriteAllLines($cfg, $out.ToArray(), [System.Text.Encoding]::UTF8)
+
+$modeName = if ($Max) { '极致流畅（全关特效）' } elseif ($Restore) { '完全恢复（全开特效）' } else { '折中（保留感觉+省资源）' }
+Write-Host "[ok] 已应用模式: $modeName" -ForegroundColor Green
 
 # 重启 Dock 生效
 Write-Host '重启 MyDockFinder 使配置生效 ...' -ForegroundColor Cyan
