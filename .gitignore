@@ -1,0 +1,8 @@
+# 壁纸由用户自行添加（macOS 官方壁纸归 Apple 所有，不在本仓库分发）
+wallpaper/macos/*.jpg
+wallpaper/macos/*.png
+!wallpaper/macos/.gitkeep
+
+# 个人环境
+*.local
+.env
