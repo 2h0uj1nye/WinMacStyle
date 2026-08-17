@@ -10,6 +10,17 @@
 
 ---
 
+## 📸 效果展示
+
+> 图片放法：把你的桌面截图保存为 `docs/screenshot.png`，GitHub 会自动显示。
+> 截图技巧：开启 Mac 风格后按 `Win + Shift + S` 或 `Win + PrtScn` 截屏。
+
+![macOS 风格效果展示](docs/screenshot.png)
+
+*↑ 示意图位置：在 Mac 风格开启状态下截一张桌面图，替换 `docs/screenshot.png` 即可*
+
+---
+
 ## ✨ 功能一览
 
 | 切换项 | 🍎 Mac 风格（开启） | 🪟 Windows 原生（关闭） |
