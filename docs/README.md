@@ -1,1 +1,1 @@
-﻿将你的 Mac 风格桌面截图保存为本目录的 screenshot.png 即可在项目主页展示。
+﻿screenshot.png — 开启 Mac 风格后的真实桌面截图（效果展示图）
