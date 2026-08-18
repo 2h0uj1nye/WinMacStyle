@@ -1,25 +1,28 @@
 ﻿# =============================================
-#  TaskbarGuard.ps1 — 任务栏守护（完全隐藏 + Win 键唤出）
+#  TaskbarGuard.ps1 — 任务栏守护 v5（绝对隐藏 + Win 键唤出）
 #  =============================================
-#  功能：
-#    完全隐藏 Windows 任务栏窗口（比"自动隐藏"更彻底，
-#    鼠标移到底部也不会出现），仅当按下 Win 键时临时
-#    显示任务栏（配合开始菜单使用），数秒后自动重新隐藏。
-#
-#  适用：
-#    macOS 风格模式下，让任务栏像 macOS 一样不可见，
-#    需要时按 Win 键唤出开始菜单/任务栏。
+#  行为（macOS 模式，严格符合需求）：
+#    - 平时：任务栏【绝对隐藏】——鼠标移到屏幕底部、
+#      软件退出、窗口切换、explorer 刷新，任何情况都不会出现
+#    - 按【一下】Win 键：任务栏出现（开始菜单弹出）
+#    - 唤出后：任务栏保持可用，鼠标移到最底部等操作正常
+#      （不会按一下就立即消失）
+#    - 开始菜单关闭后：任务栏自动重新隐藏
 #
 #  用法：
-#    powershell -ExecutionPolicy Bypass -File TaskbarGuard.ps1        # 前台运行（隐藏+监听）
+#    powershell -ExecutionPolicy Bypass -File TaskbarGuard.ps1        # 前台运行（守护）
 #    powershell -ExecutionPolicy Bypass -File TaskbarGuard.ps1 -Hide  # 仅隐藏后退出
 #    powershell -ExecutionPolicy Bypass -File TaskbarGuard.ps1 -Show  # 仅显示后退出
 #    powershell -ExecutionPolicy Bypass -File TaskbarGuard.ps1 -Kill  # 结束后台守护
 #
 #  原理：
-#    ShowWindow(Shell_TrayWnd, SW_HIDE) 完全隐藏任务栏窗口；
-#    循环轮询 GetAsyncKeyState(VK_LWIN/VK_RWIN)，检测到 Win 键
-#    按下时 ShowWindow(SW_SHOW) 显示任务栏，一段时间后再次隐藏。
+#    - 高频轮询（100ms）强制隐藏任务栏，除非处于"唤出状态"
+#    - 检测 Win 键【按下事件】（边沿触发：从松开变为按下）
+#      -> 进入唤出状态，任务栏显示并保持
+#    - 唤出状态下监听开始菜单：菜单出现后关闭 -> 延迟隐藏
+#    - 若按 Win 后开始菜单始终未出现（如被其他用途），
+#      8 秒超时后仍保持显示（用户可能正在使用任务栏），
+#      直到再次检测到开始菜单开合周期才隐藏
 # =============================================
 param(
     [switch]$Hide,
@@ -28,12 +31,11 @@ param(
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
-$guardName = 'TaskbarGuardLoop'
 
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
-public class TrayGuard {
+public class TrayGuardV5 {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
@@ -44,28 +46,41 @@ public class TrayGuard {
 $VK_LWIN = 0x5B
 $VK_RWIN = 0x5C
 
-function Get-TrayHandle {
-    $h = [TrayGuard]::FindWindow('Shell_TrayWnd', $null)
-    # 二级任务栏（多显示器）
-    $h2 = [TrayGuard]::FindWindow('Shell_SecondaryTrayWnd', $null)
-    return @($h, $h2) | Where-Object { $_ -ne [IntPtr]::Zero }
+function Get-TrayHandles {
+    $hs = @()
+    foreach ($cls in @('Shell_TrayWnd', 'Shell_SecondaryTrayWnd')) {
+        $h = [TrayGuardV5]::FindWindow($cls, $null)
+        if ($h -ne [IntPtr]::Zero) { $hs += $h }
+    }
+    return $hs
 }
 
 function Hide-Taskbar {
-    foreach ($h in (Get-TrayHandle)) { [TrayGuard]::ShowWindow($h, 0) | Out-Null }
-    Write-Host '[ok] 任务栏已隐藏' -ForegroundColor Green
+    foreach ($h in (Get-TrayHandles)) {
+        if ([TrayGuardV5]::IsWindowVisible($h)) { [TrayGuardV5]::ShowWindow($h, 0) | Out-Null }
+    }
 }
 
 function Show-Taskbar {
-    foreach ($h in (Get-TrayHandle)) { [TrayGuard]::ShowWindow($h, 5) | Out-Null }
-    Write-Host '[ok] 任务栏已显示' -ForegroundColor Green
+    foreach ($h in (Get-TrayHandles)) {
+        if (-not [TrayGuardV5]::IsWindowVisible($h)) { [TrayGuardV5]::ShowWindow($h, 5) | Out-Null }
+    }
+}
+
+function Test-StartMenuVisible {
+    # 开始菜单由 StartMenuExperienceHost 进程承载，检查其主窗口可见性
+    $sm = Get-Process -Name 'StartMenuExperienceHost' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($sm -and $sm.MainWindowHandle -ne 0) {
+        return [TrayGuardV5]::IsWindowVisible($sm.MainWindowHandle)
+    }
+    return $false
 }
 
 # ---------- 单次操作模式 ----------
-if ($Hide) { Hide-Taskbar; exit 0 }
-if ($Show) { Show-Taskbar; exit 0 }
+if ($Hide) { Hide-Taskbar; Write-Host '[ok] 任务栏已隐藏' -ForegroundColor Green; exit 0 }
+if ($Show) { Show-Taskbar; Write-Host '[ok] 任务栏已显示' -ForegroundColor Green; exit 0 }
 
-# ---------- Kill 模式：结束已有的守护循环 ----------
+# ---------- Kill 模式 ----------
 if ($Kill) {
     Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
         Where-Object { $_.CommandLine -match 'TaskbarGuard' -and $_.CommandLine -notmatch 'Kill' } |
@@ -74,43 +89,73 @@ if ($Kill) {
     exit 0
 }
 
-# ---------- 守护循环模式（默认） ----------
+# ---------- 守护循环模式 ----------
 Write-Host '========================================' -ForegroundColor Cyan
-Write-Host '  任务栏守护运行中（按 Win 键唤出任务栏）' -ForegroundColor Cyan
+Write-Host '  任务栏守护运行中（绝对隐藏，按 Win 键唤出）' -ForegroundColor Cyan
 Write-Host '  关闭本窗口或运行 -Kill 即可停止' -ForegroundColor Cyan
 Write-Host '========================================' -ForegroundColor Cyan
 
+# 初始状态：隐藏
 Hide-Taskbar
 
-$hiddenSince = Get-Date
-$wasPressed = $false
+# ---------- 状态机 ----------
+#   'hidden'  = 绝对隐藏（默认）——任务栏强制不可见
+#   'shown'   = 已唤出（按过 Win 键）——任务栏保持显示、可操作
+#   'waiting' = 开始菜单已关闭——延迟后回到 hidden
+$state = 'hidden'
+$wasWinDown = $false
+$menuSeen = $false          # 本次唤出周期内是否见过开始菜单
+$hideAt = Get-Date -Year 2000 -Month 1 -Day 1
+$hideDelayMs = 2000         # 菜单关闭后延迟隐藏时间（给用户操作缓冲）
 
 while ($true) {
-    $lwin = [TrayGuard]::GetAsyncKeyState($VK_LWIN) -band 0x8000
-    $rwin = [TrayGuard]::GetAsyncKeyState($VK_RWIN) -band 0x8000
-    $pressed = ($lwin -ne 0) -or ($rwin -ne 0)
+    $lwin = [TrayGuardV5]::GetAsyncKeyState($VK_LWIN) -band 0x8000
+    $rwin = [TrayGuardV5]::GetAsyncKeyState($VK_RWIN) -band 0x8000
+    $winDown = ($lwin -ne 0) -or ($rwin -ne 0)
 
-    if ($pressed -and -not $wasPressed) {
-        # Win 键刚按下：显示任务栏
-        foreach ($h in (Get-TrayHandle)) {
-            if (-not [TrayGuard]::IsWindowVisible($h)) { [TrayGuard]::ShowWindow($h, 5) | Out-Null }
+    # 检测 Win 键【按下事件】（边沿触发：从松开变为按下）
+    if ($winDown -and -not $wasWinDown) {
+        if ($state -eq 'hidden') {
+            Show-Taskbar
+            $state = 'shown'
+            $script:menuSeen = $false
+            Write-Host ("[{0}] Win 键按下 -> 任务栏唤出" -f (Get-Date -Format 'HH:mm:ss')) -ForegroundColor DarkGray
+        } elseif ($state -eq 'waiting') {
+            # 等待隐藏期间又按了 Win：回到 shown
+            $state = 'shown'
+            $script:menuSeen = $false
+            Write-Host ("[{0}] 再次按 Win -> 保持显示" -f (Get-Date -Format 'HH:mm:ss')) -ForegroundColor DarkGray
         }
-        $hiddenSince = Get-Date
     }
-    $wasPressed = $pressed
+    $wasWinDown = $winDown
 
-    # 如果任务栏可见且 Win 键已松开超过 4 秒，重新隐藏
-    if (-not $pressed) {
-        foreach ($h in (Get-TrayHandle)) {
-            if ([TrayGuard]::IsWindowVisible($h)) {
-                $elapsed = (Get-Date) - $hiddenSince
-                if ($elapsed.TotalSeconds -gt 4) {
-                    [TrayGuard]::ShowWindow($h, 0) | Out-Null
-                    $hiddenSince = Get-Date
-                }
+    switch ($state) {
+        'hidden' {
+            # 绝对隐藏：只要可见就立即藏回
+            Hide-Taskbar
+        }
+        'shown' {
+            # 唤出状态：任务栏保持显示，不主动隐藏
+            # 记录开始菜单是否出现过
+            if (Test-StartMenuVisible) { $script:menuSeen = $true }
+        }
+        'waiting' {
+            # 等待隐藏：任务栏仍保持显示（用户可能还在操作）
+            if ((Get-Date) -ge $script:hideAt) {
+                Hide-Taskbar
+                $state = 'hidden'
+                $script:menuSeen = $false
+                Write-Host ("[{0}] 任务栏已重新隐藏" -f (Get-Date -Format 'HH:mm:ss')) -ForegroundColor DarkGray
             }
         }
     }
 
-    Start-Sleep -Milliseconds 200
+    # shown -> waiting 转换：开始菜单出现过，现在关闭了
+    if ($state -eq 'shown' -and $script:menuSeen -and -not (Test-StartMenuVisible)) {
+        $state = 'waiting'
+        $script:hideAt = (Get-Date).AddMilliseconds($hideDelayMs)
+        Write-Host ("[{0}] 开始菜单关闭 -> 准备隐藏" -f (Get-Date -Format 'HH:mm:ss')) -ForegroundColor DarkGray
+    }
+
+    Start-Sleep -Milliseconds 100
 }

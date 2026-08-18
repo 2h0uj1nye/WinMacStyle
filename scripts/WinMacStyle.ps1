@@ -182,7 +182,7 @@ function Start-MacStyle {
     Write-Host '  [3/4] 启动任务栏守护（隐藏任务栏，按 Win 键唤出）...' -ForegroundColor Green
     $guardScript = Join-Path $PSScriptRoot 'TaskbarGuard.ps1'
     if (Test-Path $guardScript) {
-        Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$guardScript`"" -WindowStyle Hidden
+        Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File `"$guardScript`""
         Start-Sleep -Seconds 2
         Write-Host '  [ok] 任务栏守护已启动'
     } else {
