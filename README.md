@@ -6,15 +6,14 @@
 
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d6.svg)](https://github.com)
 [![PowerShell](https://img.shields.io/badge/script-PowerShell-5391FE.svg)](#)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](/LICENSE)[![许可证：MIT](https://img.shields.io/badge/license-MIT-blue.svg)](/LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](/LICENSE)[![许可证：MIT](https://img.shields.io/badge/license-MIT-blue.svg)](/LICENSE)[![许可证：MIT](https://img.shields.io/badge/license-MIT-blue.svg)](/LICENSE)[![许可证：MIT](https://img.shields.io/badge/license-MIT-blue.svg)](/LICENSE)
 
 ---
 
 ## 📸 效果展示
 
-![macOS 风格效果展示](docs/screenshot.png)(屏幕截图(8).png)
-
-
+![macOS 风格效果展示 1](docs/screenshot.png)
+![macOS 风格效果展示 2](docs/screenshot2.png)
 
 ---
 
