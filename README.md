@@ -12,7 +12,7 @@
 
 ## 📸 效果展示
 
-![macOS 风格效果展示](docs/screenshot.png)
+![macOS 风格效果展示](docs/screenshot.png)(屏幕截图(8).png)
 
 *↑ 在 Mac 风格开启状态下截一张桌面图，保存为 `docs/screenshot.png` 即可替换*
 
