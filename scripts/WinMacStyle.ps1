@@ -120,9 +120,11 @@ function Set-DesktopIcons([bool]$show) {
     }
 }
 
-function Set-TaskbarAutoHide([bool]$autoHide) {
-    # $true=自动隐藏任务栏  $false=常驻显示
-    # StuckRects3 Settings 第 9 字节: 03=自动隐藏 02=正常
+function Set-TaskbarAutoHide([bool]$autoHide, [int]$position = 0) {
+    # $autoHide=$true 自动隐藏任务栏（仅按 Win 键唤出）
+    # $autoHide=$false 常驻显示
+    # $position: 0=靠左 3=底部（任务栏位置，默认靠左实现"不易误触"）
+    # StuckRects3 Settings: [8]=自动隐藏(03/02) [12]=位置(00=左 03=底)
     $val = if ($autoHide) { 3 } else { 2 }
     $settings = (Get-ItemProperty $regStuck -Name Settings -ErrorAction SilentlyContinue).Settings
     if ($null -eq $settings) {
@@ -130,8 +132,10 @@ function Set-TaskbarAutoHide([bool]$autoHide) {
         return
     }
     $settings[8] = $val
+    if ($settings.Length -gt 12) { $settings[12] = $position }
     Set-ItemProperty $regStuck -Name Settings -Value $settings -Type Binary
-    Write-Host "  [ok] 任务栏已设为$(if($autoHide){'自动隐藏（鼠标移到底部滑出）'}else{'常驻显示'})"
+    $posName = switch ($position) { 0 { '靠左' } 1 { '靠右' } 2 { '顶部' } 3 { '底部' } default { '靠左' } }
+    Write-Host "  [ok] 任务栏已设为$(if($autoHide){'自动隐藏（仅按 Win 键唤出）'}else{'常驻显示'})，位置$posName"
 }
 
 function Restart-Explorer {
@@ -178,34 +182,15 @@ function Start-MacStyle {
     Write-Host '  [2/4] 隐藏桌面图标 ...' -ForegroundColor Green
     Set-DesktopIcons -show $false
 
-    # 3. 启动任务栏守护（完全隐藏任务栏，按 Win 键唤出）
-    Write-Host '  [3/4] 启动任务栏守护（隐藏任务栏，按 Win 键唤出）...' -ForegroundColor Green
-    $guardScript = Join-Path $PSScriptRoot 'TaskbarGuard.ps1'
-    if (Test-Path $guardScript) {
-        # 用 cmd start 独立启动守护，脱离当前进程树（父进程退出不影响守护存活）
-        $cmdLine = "start `"`" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File `"$guardScript`""
-        Start-Process cmd -ArgumentList "/c $cmdLine" -WindowStyle Hidden
-        Start-Sleep -Seconds 2
-        Write-Host '  [ok] 任务栏守护已启动'
-    } else {
-        Write-Host '  [warn] 未找到 TaskbarGuard.ps1，仅隐藏任务栏窗口（不启用自动隐藏）' -ForegroundColor Yellow
-        # 保持 StuckRects3=02（常驻），只硬隐藏窗口，避免鼠标悬停滑出
-    }
+    # 3. 任务栏：自动隐藏 + 位置靠左（平时不可见，仅按 Win 键唤出，不易误触）
+    Write-Host '  [3/4] 设置任务栏自动隐藏（靠左，仅按 Win 键唤出）...' -ForegroundColor Green
+    Set-TaskbarAutoHide -autoHide $true -position 0
 
-    # 4. 隐藏任务栏窗口（无需重启 explorer）
-    Write-Host '  [4/4] 隐藏任务栏窗口 ...' -ForegroundColor Green
-    try {
-        Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-public class TrayH {
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
-    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-}
-'@
-        $th = [TrayH]::FindWindow('Shell_TrayWnd', $null)
-        if ($th -ne [IntPtr]::Zero) { [TrayH]::ShowWindow($th, 0) | Out-Null; Write-Host '  [ok] 任务栏已隐藏' }
-    } catch { }
+    # 4. 重启 explorer 使任务栏设置生效（自动隐藏模式下任务栏由系统管理）
+    Write-Host '  [4/4] 重启 explorer 应用设置 ...' -ForegroundColor Green
+    Restart-Explorer
+    # explorer 重启后同步图标状态（重启会把 HideIcons 重置为 1，正好是隐藏）
+    Set-DesktopIcons -show $false
 
     Write-Host ''
     Write-Host '  Mac 风格已开启！' -ForegroundColor Green
@@ -228,19 +213,10 @@ function Stop-MacStyle {
         Write-Host '  [1/4] MyDockFinder 未在运行' -ForegroundColor Green
     }
 
-    # 2. 停止任务栏守护并恢复任务栏
-    Write-Host '  [2/4] 停止任务栏守护，恢复任务栏 ...' -ForegroundColor Green
-    $guardScript = Join-Path $PSScriptRoot 'TaskbarGuard.ps1'
-    if (Test-Path $guardScript) {
-        # 结束已有的守护进程
-        Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
-            Where-Object { $_.CommandLine -match 'TaskbarGuard' } |
-            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-        # 显示任务栏窗口
-        powershell -NoProfile -ExecutionPolicy Bypass -File $guardScript -Show 2>$null
-    } else {
-        Set-TaskbarAutoHide -autoHide $false
-    }
+    # 2. 恢复任务栏（常驻 + 底部位置）
+    Write-Host '  [2/4] 恢复任务栏常驻显示（底部）...' -ForegroundColor Green
+    Set-TaskbarAutoHide -autoHide $false -position 3
+    Restart-Explorer
 
     # 3. 恢复桌面图标（消息方式，不重启 explorer）
     Write-Host '  [3/4] 恢复桌面图标 ...' -ForegroundColor Green

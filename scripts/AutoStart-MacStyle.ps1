@@ -41,15 +41,8 @@ public class TBShc {
     }
 } catch { }
 
-# 执行 Mac 风格开启（含 Dock 启动、图标隐藏）
+# 执行 Mac 风格开启（含 Dock 启动、图标隐藏、任务栏自动隐藏+靠左）
 $script = 'C:\Users\Administrator\Documents\WinMacStyle\scripts\WinMacStyle.ps1'
 if (Test-Path $script) {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $script -On
-}
-
-# 单独启动任务栏守护（cmd start 独立进程，脱离本进程树，确保长期存活）
-$guard = 'C:\Users\Administrator\Documents\WinMacStyle\scripts\TaskbarGuard.ps1'
-if (Test-Path $guard) {
-    $cmdLine = "start `"`" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File `"$guard`""
-    Start-Process cmd -ArgumentList "/c $cmdLine" -WindowStyle Hidden
 }
