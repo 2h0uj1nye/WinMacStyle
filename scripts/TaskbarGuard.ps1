@@ -95,6 +95,17 @@ Write-Host '  任务栏守护运行中（绝对隐藏，按 Win 键唤出）' -F
 Write-Host '  关闭本窗口或运行 -Kill 即可停止' -ForegroundColor Cyan
 Write-Host '========================================' -ForegroundColor Cyan
 
+# 确保 Windows 任务栏处于"常驻"模式（StuckRects3=02），
+# 关闭系统自带的"自动隐藏"逻辑（否则鼠标移到底部会滑出任务栏）
+try {
+    $regStuck = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3'
+    $sr = (Get-ItemProperty $regStuck -Name Settings -ErrorAction SilentlyContinue).Settings
+    if ($sr -and $sr.Length -gt 8 -and $sr[8] -ne 2) {
+        $sr[8] = 2
+        Set-ItemProperty $regStuck -Name Settings -Value $sr -Type Binary
+    }
+} catch { }
+
 # 初始状态：隐藏
 Hide-Taskbar
 

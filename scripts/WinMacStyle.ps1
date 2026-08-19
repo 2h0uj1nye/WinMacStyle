@@ -186,8 +186,8 @@ function Start-MacStyle {
         Start-Sleep -Seconds 2
         Write-Host '  [ok] 任务栏守护已启动'
     } else {
-        Write-Host '  [warn] 未找到 TaskbarGuard.ps1，回退为自动隐藏' -ForegroundColor Yellow
-        Set-TaskbarAutoHide -autoHide $true
+        Write-Host '  [warn] 未找到 TaskbarGuard.ps1，仅隐藏任务栏窗口（不启用自动隐藏）' -ForegroundColor Yellow
+        # 保持 StuckRects3=02（常驻），只硬隐藏窗口，避免鼠标悬停滑出
     }
 
     # 4. 隐藏任务栏窗口（无需重启 explorer）
